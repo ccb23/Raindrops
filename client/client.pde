@@ -1,7 +1,7 @@
 /*
- * mtXControl Arduino Firmware
+ * Raindrops - Client.pde
+ * upload this on the rainbowduino
  */
-// word is same as unsigend int
 
 #include <Wire.h>
 #include <Rainbowduino.h>
@@ -12,7 +12,7 @@
 
 Rainbowduino rainbow = Rainbowduino(10);
 
-byte game[24]; 
+byte game[24];
 
 word current_delay = 0;
 word current_speed = DEFAULT_SPEED;
@@ -34,11 +34,13 @@ byte wait_and_read_serial();
 volatile boolean running = false;
 
 void setup_timer() {
-  TCCR2A = 0;
-  TCCR2B = 1<<CS22 | 0<<CS21 | 0<<CS20;
-  //Timer2 Overflow Interrupt Enable
-  TIMSK2 = 1<<TOIE2;
-  TCNT2 = 0 ;
+  TCCR2A |= (1 << WGM21) | (1 << WGM20);
+  TCCR2B |= (1<<CS22); // by clk/64
+  TCCR2B &= ~((1<<CS21) | (1<<CS20));   // by clk/64
+  TCCR2B &= ~((1<<WGM21) | (1<<WGM20));   // Use normal mode
+  ASSR |= (0<<AS2);       // Use internal clock - external clock not used in Arduino
+  TIMSK2 |= (1<<TOIE2) | (0<<OCIE2B);   //Timer2 Overflow Interrupt Enable
+  TCNT2 = 0xE7; //gamma value
   sei();
 }
 
@@ -48,7 +50,6 @@ ISR(TIMER2_OVF_vect) {
 }
 
 void setup() {
-  Serial.begin(BAUD_RATE);
   Wire.begin(0);
   Wire.onReceive(check_serial);
   reset();
@@ -72,7 +73,7 @@ void reset() {
   rainbow.reset();
   for(byte i = 0; i < 24; i++) {
     game[i] = 0;
-  }  
+  }
   running = false;
   current_delay = 0;
   current_speed = DEFAULT_SPEED;
@@ -80,48 +81,47 @@ void reset() {
 
 void loop() {
   if(!running) start();
-  delayMicroseconds(100); 
+  delayMicroseconds(100);
   next_frame();
-  //Serial.write(rainbow.dnum_frames());
 }
 
 void start() {
   rainbow.set_frame_nr(6);
   delay(1000);
   rainbow.set_frame_nr(1);
-  delay(50); 
+  delay(50);
 
   rainbow.set_frame_nr(7);
   delay(1000);
   rainbow.set_frame_nr(1);
-  delay(50); 
+  delay(50);
 
   rainbow.set_frame_nr(8);
   delay(1000);
   rainbow.set_frame_nr(1);
-  delay(50); 
+  delay(50);
 
   rainbow.set_frame_nr(9);
-  delay(1200);   
+  delay(1200);
 
-  rainbow.set_frame_nr(0); 
+  rainbow.set_frame_nr(0);
   running = true;
 }
 
 void finish() {
   running = false;
-  rainbow.set_frame(0, w);    
-  for(int k = 0; k < 7; k++ ) {
+  rainbow.set_frame(0, w);
+  for(int k = 0; k < 7; k++) {
     rainbow.set_frame_nr(0);
     delay(100);
     rainbow.set_frame_nr(1);
-    delay(80); 
+    delay(80);
   }
 
-  rainbow.set_frame_nr(0);      
+  rainbow.set_frame_nr(0);
   reset();
   delay(2000);
-  rainbow.set_frame_nr(1);       
+  rainbow.set_frame_nr(1);
   delay(2000);
 }
 
@@ -130,29 +130,29 @@ void next_frame() {
   if(current_delay < 1) {
     shift_frame();
     rainbow.set_frame(0, game);
-    current_delay = current_speed / (y+1); // / rows /rows * 300;
+    current_delay = current_speed / (y+1);
   }
   current_delay--;
 }
 
 void  shift_frame() {
-  for(byte i = 0; i < 24; i++) { 
+  for(byte i = 0; i < 24; i++) {
     game[i] = get_pixel(i);
   }
   if(game[2] - game[0] == 0 ||  game[1] - game[0] == 0) finish();
 }
 
 byte get_pixel(byte i) {
-  if( i == 23 )  return 1 << random(10);
-  if( i == 0 )  return 1 << x;
-  if( i < 21) return game[i+3];
+  if(i == 23) return 1 << random(10);
+  if(i == 0)  return 1 << x;
+  if(i < 21)  return game[i+3];
   return 0;
 }
 
 void check_serial(int n) {
-  if( !Wire.available()) return; // if( !Serial.available() ) return;
+  if(!Wire.available()) return;
   byte value = read_serial();
-  if( value == 255 ) {
+  if(value == 255) {
     int p = read_serial() / 10;
     int r = read_serial() / 10;
     if(!running) return;
@@ -177,7 +177,6 @@ byte read_serial() {
 }
 
 byte wait_and_read_serial() {
-  while( !Wire.available() );
+  while(!Wire.available());
   return read_serial();
 }
-
